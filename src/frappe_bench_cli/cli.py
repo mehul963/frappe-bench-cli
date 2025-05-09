@@ -59,7 +59,8 @@ def backup(bench_path, output, no_compress):
 @click.option('--target-dir', '-t', type=click.Path(), help='Target directory for restoration')
 @click.option('--skip-apps', is_flag=True, help='Skip installing apps')
 @click.option('--skip-sites', is_flag=True, help='Skip restoring sites')
-def restore(backup_path, target_dir, skip_apps, skip_sites):
+@click.option('--new-name', '-n', help='New name for the restored bench')
+def restore(backup_path, target_dir, skip_apps, skip_sites, new_name):
     """Restore Frappe bench from backup"""
     try:
         target_dir = target_dir or Path.cwd()
@@ -67,7 +68,8 @@ def restore(backup_path, target_dir, skip_apps, skip_sites):
             backup_path=backup_path,
             target_dir=target_dir,
             skip_apps=skip_apps,
-            skip_sites=skip_sites
+            skip_sites=skip_sites,
+            new_name=new_name
         )
         
         console.print(Panel.fit(

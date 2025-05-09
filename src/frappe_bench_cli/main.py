@@ -27,7 +27,7 @@ def backup(bench_path, output_dir, compress=True):
     )
 
 
-def restore(backup_path, target_dir, skip_apps=False, skip_sites=False):
+def restore(backup_path, target_dir, skip_apps=False, skip_sites=False, new_name=None):
     """
     Restore Frappe bench programmatically
     
@@ -36,6 +36,7 @@ def restore(backup_path, target_dir, skip_apps=False, skip_sites=False):
         target_dir (str): Directory where to restore the bench
         skip_apps (bool, optional): Skip installing apps
         skip_sites (bool, optional): Skip restoring sites
+        new_name (str, optional): New name for the restored bench
         
     Returns:
         str: Path to the restored bench directory
@@ -44,7 +45,8 @@ def restore(backup_path, target_dir, skip_apps=False, skip_sites=False):
         backup_path=backup_path,
         target_dir=target_dir,
         skip_apps=skip_apps,
-        skip_sites=skip_sites
+        skip_sites=skip_sites,
+        new_name=new_name
     )
 
 # CLI entrypoint

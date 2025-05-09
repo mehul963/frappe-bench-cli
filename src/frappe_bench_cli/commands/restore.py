@@ -18,14 +18,14 @@ def extract_backup(backup_path, target_dir):
     if not backup_path.exists():
         raise FileNotFoundError(f"Backup file not found: {backup_path}")
     
-    if backup_path.suffix == '.tar.gz':
+    if backup_path.suffix == '.gz':
         with tarfile.open(backup_path, 'r:gz') as tar:
             tar.extractall(target_dir)
-        return target_dir / backup_path.stem
+        return target_dir
     else:
         raise ValueError(f"Unsupported backup format: {backup_path.suffix}")
 
-def restore_bench(backup_path, target_dir, skip_apps=False, skip_sites=False):
+def restore_bench(backup_path, target_dir, skip_apps=False, skip_sites=False, new_name=None):
     """
     Restore Frappe bench from backup
     
@@ -34,15 +34,16 @@ def restore_bench(backup_path, target_dir, skip_apps=False, skip_sites=False):
         target_dir (str): Directory where to restore the bench
         skip_apps (bool, optional): Skip installing apps
         skip_sites (bool, optional): Skip restoring sites
+        new_name (str, optional): New name for the restored bench
         
     Returns:
         str: Path to the restored bench directory
     """
     backup_path = Path(backup_path)
     target_dir = Path(target_dir)
-    
     # Extract backup if it's an archive
-    if backup_path.suffix == '.tar.gz':
+    print(f'{backup_path.suffix = }')
+    if backup_path.suffix == '.gz':
         backup_dir = extract_backup(backup_path, target_dir)
     else:
         backup_dir = backup_path
@@ -55,8 +56,13 @@ def restore_bench(backup_path, target_dir, skip_apps=False, skip_sites=False):
     with open(bench_info_path) as f:
         bench_info = json.load(f)
     
+    # Use new name if provided, otherwise use original name
+    bench_name = new_name if new_name else bench_info['name']
+    
     # Create bench directory
-    bench_dir = target_dir / bench_info['name']
+    bench_dir = target_dir / bench_name
+    if bench_dir.exists():
+        raise ValueError(f"Bench directory already exists: {bench_dir}")
     bench_dir.mkdir(parents=True, exist_ok=True)
     
     # Clone apps
