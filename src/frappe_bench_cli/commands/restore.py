@@ -7,6 +7,7 @@ from pathlib import Path
 from git import Repo
 from rich.console import Console
 from rich.progress import Progress
+from .create import create_bench
 
 console = Console()
 
@@ -41,8 +42,8 @@ def restore_bench(backup_path, target_dir, skip_apps=False, skip_sites=False, ne
     """
     backup_path = Path(backup_path)
     target_dir = Path(target_dir)
+    
     # Extract backup if it's an archive
-    print(f'{backup_path.suffix = }')
     if backup_path.suffix == '.gz':
         backup_dir = extract_backup(backup_path, target_dir)
     else:
@@ -58,37 +59,14 @@ def restore_bench(backup_path, target_dir, skip_apps=False, skip_sites=False, ne
     
     # Use new name if provided, otherwise use original name
     bench_name = new_name if new_name else bench_info['name']
-    
-    # Create bench directory
     bench_dir = target_dir / bench_name
-    if bench_dir.exists():
-        raise ValueError(f"Bench directory already exists: {bench_dir}")
-    bench_dir.mkdir(parents=True, exist_ok=True)
     
-    # Clone apps
-    if not skip_apps:
-        apps_dir = bench_dir / 'apps'
-        apps_dir.mkdir(parents=True, exist_ok=True)
-        
-        with Progress() as progress:
-            task = progress.add_task("[cyan]Cloning apps...", total=len(bench_info['apps']))
-            
-            for app in bench_info['apps']:
-                try:
-                    app_dir = apps_dir / app['name']
-                    if not app_dir.exists():
-                        repo = Repo.clone_from(app['git_url'], app_dir)
-                        repo.git.checkout(app['version'])
-                    console.print(f"[green]Successfully cloned {app['name']} at {app['version']}[/green]")
-                except Exception as e:
-                    console.print(f"[red]Failed to clone {app['name']}: {str(e)}[/red]")
-                progress.advance(task)
+    # Create bench using the info file
+    console.print(f"[cyan]Creating bench at {bench_dir}...[/cyan]")
+    create_bench(bench_dir, bench_info_path)
     
-    # Restore sites
+    # Restore sites if not skipped
     if not skip_sites:
-        sites_dir = bench_dir / 'sites'
-        sites_dir.mkdir(parents=True, exist_ok=True)
-        
         site_backups_dir = backup_dir / 'site_backups'
         if site_backups_dir.exists():
             with Progress() as progress:
@@ -97,7 +75,7 @@ def restore_bench(backup_path, target_dir, skip_apps=False, skip_sites=False, ne
                 for site in bench_info['sites']:
                     try:
                         site_name = site['name']
-                        site_dir = sites_dir / site_name
+                        site_dir = bench_dir / 'sites' / site_name
                         site_dir.mkdir(parents=True, exist_ok=True)
                         
                         # Copy site backup to the site's private/backups directory
@@ -128,9 +106,8 @@ def restore_bench(backup_path, target_dir, skip_apps=False, skip_sites=False, ne
                                     console.print(f"[red]Failed to restore site {site_name}: {result.stderr}[/red]")
                             else:
                                 console.print(f"[yellow]No backup files found for site {site_name}[/yellow]")
-                        
                     except Exception as e:
-                        console.print(f"[red]Failed to restore site {site['name']}: {str(e)}[/red]")
+                        console.print(f"[red]Error restoring site {site['name']}: {str(e)}[/red]")
                     progress.advance(task)
     
     return bench_dir

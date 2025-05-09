@@ -12,6 +12,7 @@ from rich.panel import Panel
 
 from .commands.backup import backup_bench
 from .commands.restore import restore_bench
+from .commands.create import create_bench
 
 console = Console()
 
@@ -81,4 +82,27 @@ def restore(backup_path, target_dir, skip_apps, skip_sites, new_name):
         console.print(Panel.fit(
             f"[red]Error during restore: {str(e)}[/red]",
             title="Restore Failed"
+        ))
+
+
+@cli.command()
+@click.argument('bench_path', type=click.Path())
+@click.option('--info-file', '-i', type=click.Path(exists=True), help='Path to bench info JSON file')
+def create(bench_path, info_file):
+    """Create a new Frappe bench"""
+    try:
+        result = create_bench(
+            bench_path=bench_path,
+            info_file=info_file
+        )
+        
+        console.print(Panel.fit(
+            f"[green]Successfully created bench at {result}[/green]",
+            title="Create Complete"
+        ))
+        
+    except Exception as e:
+        console.print(Panel.fit(
+            f"[red]Error during bench creation: {str(e)}[/red]",
+            title="Create Failed"
         ))

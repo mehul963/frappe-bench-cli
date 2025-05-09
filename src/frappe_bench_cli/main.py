@@ -5,6 +5,7 @@ FBM (Frappe Bench Manager) - Main module for programmatic usage and CLI entrypoi
 from .cli import cli
 from .commands.backup import backup_bench
 from .commands.restore import restore_bench
+from .commands.create import create_bench
 
 # Programmatic API
 
@@ -47,6 +48,22 @@ def restore(backup_path, target_dir, skip_apps=False, skip_sites=False, new_name
         skip_apps=skip_apps,
         skip_sites=skip_sites,
         new_name=new_name
+    )
+
+def create(bench_path, info_file=None):
+    """
+    Create a new Frappe bench programmatically
+    
+    Args:
+        bench_path (str): Path where the bench should be created
+        info_file (str, optional): Path to bench info JSON file
+        
+    Returns:
+        str: Path to the created bench
+    """
+    return create_bench(
+        bench_path=bench_path,
+        info_file=info_file
     )
 
 # CLI entrypoint

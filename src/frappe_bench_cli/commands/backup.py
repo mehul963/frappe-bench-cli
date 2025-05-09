@@ -97,7 +97,6 @@ def backup_bench(bench_path, output_dir, compress=True):
         archive_path = output_dir / f"{backup_name}.tar.gz"
         shutil.make_archive(str(backup_dir), 'gztar', backup_dir)
         shutil.rmtree(backup_dir)
-        print(archive_path)
         return archive_path
     
     return backup_dir
