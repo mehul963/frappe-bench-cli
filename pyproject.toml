@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fbm"
+version = "0.1.0"
+description = "A CLI tool for backing up and restoring Frappe benches"
+readme = "README.md"
+requires-python = ">=3.7"
+license = "MIT"
+dependencies = [
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "gitpython>=3.1.40",
+    "frappe-bench>=5.0.0",
+]
+
+[project.scripts]
+fbm = "frappe_bench_cli.main:cli"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["frappe_bench_cli", "frappe_bench_cli.commands"]
