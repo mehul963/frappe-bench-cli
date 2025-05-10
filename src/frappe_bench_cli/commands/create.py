@@ -21,9 +21,6 @@ class BenchCreator:
         with open(info_file) as f:
             bench_info = json.load(f)
         
-        # Create bench directory
-        
-        # Initialize bench
         if not bench_path.exists():
             bench_path.mkdir(parents=True, exist_ok=True)
             init(f"{bench_path}", python=bench_info.get('python_version', 'python3'), frappe_branch=bench_info.get('frappe_branch', 'version-15'))

@@ -10,7 +10,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 
-from .commands.backup import backup_bench
+from .commands.backup import backup_bench, backup_all_benches
 from .commands.restore import restore_bench
 from .commands.create import create_bench
 
@@ -23,18 +23,28 @@ def cli():
     pass
 
 
-@cli.command()
+@cli.group()
+def backup():
+    """Backup Frappe benches"""
+    pass
+
+
+@backup.command()
 @click.argument('bench_path', type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.option('--output', '-o', type=click.Path(), help='Output directory for backup files')
-@click.option('--no-compress', is_flag=False, help='Do not compress the backup')
-def backup(bench_path, output, no_compress):
-    """Backup a Frappe bench"""
+@click.option('--no-compress', is_flag=True, help='Do not compress the backup')
+@click.option('--backup-folder', '-b', type=click.Path(), help='Backup folder')
+@click.option('--exclude-files', is_flag=True, help='Exclude files from backup')
+def single(bench_path, output, no_compress, backup_folder, exclude_files):
+    """Backup a single Frappe bench"""
     try:
         output_dir = output or Path.cwd() / 'backups'
         result = backup_bench(
             bench_path=Path(bench_path),
             output_dir=output_dir,
-            compress=not no_compress
+            compress=not no_compress,
+            backup_folder=backup_folder,
+            exclude_files=exclude_files
         )
         
         if result:
@@ -45,6 +55,45 @@ def backup(bench_path, output, no_compress):
         else:
             console.print(Panel.fit(
                 "[yellow]Backup failed[/yellow]",
+                title="Backup Failed"
+            ))
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        console.print(Panel.fit(
+            f"[red]Error during backup: {str(e)}[/red]",
+            title="Backup Failed"
+        ))
+
+
+@backup.command()
+@click.argument('benches_folder', type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option('--output', '-o', type=click.Path(), help='Output directory for backup files')
+@click.option('--no-compress', is_flag=True, help='Do not compress the backup')
+@click.option('--backup-folder', '-b', type=click.Path(), help='Backup folder')
+@click.option('--exclude-files', is_flag=True, help='Exclude files from backup')
+def all(benches_folder, output, no_compress, backup_folder, exclude_files):
+    """Backup all Frappe benches in a folder"""
+    try:
+        output_dir = output or Path.cwd() / 'backups'
+        results = backup_all_benches(
+            benches_folder=benches_folder,
+            output_dir=output_dir,
+            compress=not no_compress,
+            backup_folder=backup_folder,
+            exclude_files=exclude_files
+        )
+        
+        if results:
+            console.print(Panel.fit(
+                f"[green]Successfully backed up {len(results)} benches:[/green]\n" + 
+                "\n".join(f"- {result}" for result in results),
+                title="Backup Complete"
+            ))
+        else:
+            console.print(Panel.fit(
+                "[yellow]No benches were backed up[/yellow]",
                 title="Backup Failed"
             ))
             

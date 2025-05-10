@@ -17,24 +17,36 @@ class BenchBackupManager:
         self,
         bench_dir: Union[str, Path],
         output_dir: Union[str, Path],
-        compress: bool = True
+        compress: bool = True,
+        exclude_files: bool = False,
+        backup_folder: Optional[str] = None
     ):
         self.bench_dir = Path(bench_dir)
         self.output_dir = Path(output_dir)
         self.compress = compress
+        self.exclude_files = exclude_files
+        self.backup_folder = backup_folder
         self.console = Console()
 
         if not self.bench_dir.exists():
             raise FileNotFoundError(f"Bench directory not found: {self.bench_dir}")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    @property
-    def sites(self) -> List[str]:
+    def sites(self, bench_path: Path) -> List[str]:
         return [
             path
-            for path in os.listdir(os.path.join(self.bench_dir, "sites"))
-            if os.path.exists(os.path.join(self.bench_dir, "sites", path, "site_config.json"))
+            for path in os.listdir(os.path.join(bench_path, "sites"))
+            if os.path.exists(os.path.join(bench_path, "sites", path, "site_config.json"))
         ]
+        
+    @property
+    def benches(self) -> List[Path]:
+        return [
+            Path(self.bench_dir, path)
+            for path in self.bench_dir.iterdir()
+            if self.is_valid_bench(path)
+        ]
+    
     @staticmethod
     def is_valid_bench(bench_path: Path) -> bool:
         """Check if the given path is a valid Frappe bench."""
@@ -66,7 +78,7 @@ class BenchBackupManager:
             {
                 'name': site
             }
-            for site in self.sites
+            for site in self.sites(bench_path)
         ]
 
         return info
@@ -76,7 +88,9 @@ class BenchBackupManager:
         bench_info = self.get_bench_info(bench_path)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         backup_name = f"{bench_info['name']}_{timestamp}"
-        backup_dir = self.output_dir / backup_name
+        
+        # Use specified backup folder if provided, otherwise use default output_dir
+        backup_dir = Path(self.backup_folder) / backup_name if self.backup_folder else self.output_dir / backup_name
         sites_backup_dir = backup_dir / 'sites_backup'
         backup_dir.mkdir(parents=True)
         sites_backup_dir.mkdir(parents=True)
@@ -91,15 +105,41 @@ class BenchBackupManager:
             self.console.print(f"[cyan]Backing up site {site_name}...[/cyan]")
             site_dir = sites_backup_dir / site_name
             site_dir.mkdir(parents=True)
+            database_path = site_dir / f"{site_name}-database.sql.gz"
+            files_path = site_dir / f"{site_name}-files.tar.gz"
+            private_files_path = site_dir / f"{site_name}-private-files.tar.gz"
+            
             try:
-                run_frappe_cmd(
+                # Run backup with specific paths
+                cmd_args = [
                     "--site", site_name,
                     "backup",
-                    "--backup-path", site_dir,
-                    bench_path=bench_path
-                )
+                    "--backup-path", f"{site_dir}",
+                    "--backup-path-db", f"{database_path}",
+                    "--backup-path-files", f"{files_path}",
+                    "--backup-path-private-files", f"{private_files_path}"
+                ]
+                
+                if not self.exclude_files:
+                    cmd_args.append("--with-files")
+                
+                run_frappe_cmd(*cmd_args, bench_path=bench_path)
+                
+                # Update site metadata with backup paths
+                site['backup_paths'] = {
+                    'database': str(database_path.relative_to(backup_dir)),
+                    'files': str(files_path.relative_to(backup_dir)),
+                    'private_files': str(private_files_path.relative_to(backup_dir))
+                }
+                
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 self.console.print(f"[red]Error backing up site {site_name}: {e}[/red]")
+
+        # Update bench_info with the new site metadata
+        with open(backup_dir / 'bench_info.json', 'w') as f:
+            json.dump(bench_info, f, indent=2)
 
         # Compress directory if requested
         if self.compress:
@@ -108,13 +148,20 @@ class BenchBackupManager:
             return Path(archive)
         return backup_dir
 
-    def backup_benches(self, bench_name: Optional[str] = None) -> Union[Path, List[Path], None]:
+    def backup_benches(self) -> Union[Path, List[Path], None]:
         """Backup one or all benches under the bench directory."""
-        if bench_name:
-            path = self.bench_dir / bench_name
-            if not self.is_valid_bench(path):
-                raise ValueError(f"{path} is not a valid Frappe bench")
-            return self.backup_single_bench(path)
+        results: List[Path] = []
+        for path in self.benches:
+            try:
+                result = self.backup_single_bench(path)
+                results.append(result)
+                self.console.print(f"[green]Backed up {path.name} -> {result}[/green]")
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                self.console.print(f"[red]Failed to backup {path.name}: {e}[/red]")
+
+        return results
 
         # Discover all benches
         benches = [d for d in self.bench_dir.iterdir() if d.is_dir() and self.is_valid_bench(d)]
@@ -137,31 +184,92 @@ class BenchBackupManager:
 
 
 def backup_bench(
-    bench_path: Path,
-    output_dir: Path,
-    compress: bool
+    bench_path: Path = None,
+    output_dir: Path = None,
+    compress: bool = True,
+    exclude_files: bool = False,
+    backup_folder: Optional[str] = None,
+    benches_folder: Optional[str] = None
 ):
     manager = BenchBackupManager(
-        bench_dir=bench_path,
+        bench_dir=bench_path or benches_folder,
         output_dir=output_dir,
-        compress=compress
+        compress=compress,
+        exclude_files=exclude_files,
+        backup_folder=backup_folder
     )
-    return manager.backup_single_bench(bench_path=bench_path) 
+    if not benches_folder:
+        return manager.backup_single_bench(bench_path=bench_path)
+    return manager.backup_benches()
+
+def backup_all_benches(
+    benches_folder: Union[str, Path],
+    output_dir: Union[str, Path],
+    compress: bool = True,
+    exclude_files: bool = False,
+    backup_folder: Optional[str] = None
+) -> List[Path]:
+    """
+    Backup all benches found in the specified folder.
+    
+    Args:
+        benches_folder: Directory containing multiple benches
+        output_dir: Directory to store backups
+        compress: Whether to compress the backup
+        exclude_files: Whether to exclude files from backup
+        backup_folder: Specific folder to create backup in
+        
+    Returns:
+        List of paths to the created backups
+    """
+    return backup_bench(
+        output_dir=output_dir,
+        compress=compress,
+        exclude_files=exclude_files,
+        backup_folder=backup_folder,
+        benches_folder=benches_folder
+    )
 
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description="Backup Frappe benches")
-    parser.add_argument('bench_dir', help='Directory containing benches')
-    parser.add_argument('output_dir', help='Directory to store backups')
-    parser.add_argument('--bench', help='Name of a specific bench to backup')
-    parser.add_argument('--no-compress', action='store_true', help='Do not compress backup')
+    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
+    
+    # Single bench backup command
+    single_parser = subparsers.add_parser('single', help='Backup a single bench')
+    single_parser.add_argument('bench_dir', help='Directory containing the bench')
+    single_parser.add_argument('output_dir', help='Directory to store backups')
+    single_parser.add_argument('--no-compress', action='store_true', help='Do not compress backup')
+    single_parser.add_argument('--exclude-files', action='store_true', help='Exclude files from backup')
+    single_parser.add_argument('--backup-folder', help='Specific folder to create backup in')
+    
+    # All benches backup command
+    all_parser = subparsers.add_parser('all', help='Backup all benches in a folder')
+    all_parser.add_argument('benches_folder', help='Directory containing multiple benches')
+    all_parser.add_argument('output_dir', help='Directory to store backups')
+    all_parser.add_argument('--no-compress', action='store_true', help='Do not compress backup')
+    all_parser.add_argument('--exclude-files', action='store_true', help='Exclude files from backup')
+    all_parser.add_argument('--backup-folder', help='Specific folder to create backup in')
+    
     args = parser.parse_args()
-
-    manager = BenchBackupManager(
-        bench_dir=args.bench_dir,
-        output_dir=args.output_dir,
-        compress=not args.no_compress
-    )
-    result = manager.backup_single_bench(bench_path=args.bench_dir)
-    print(result)
+    
+    if args.command == 'single':
+        manager = BenchBackupManager(
+            bench_dir=args.bench_dir,
+            output_dir=args.output_dir,
+            compress=not args.no_compress,
+            exclude_files=args.exclude_files,
+            backup_folder=args.backup_folder
+        )
+        result = manager.backup_single_bench(bench_path=Path(args.bench_dir))
+    elif args.command == 'all':
+        results = backup_all_benches(
+            benches_folder=args.benches_folder,
+            output_dir=args.output_dir,
+            compress=not args.no_compress,
+            exclude_files=args.exclude_files,
+            backup_folder=args.backup_folder
+        )
+    else:
+        parser.print_help()
