@@ -32,7 +32,7 @@ def backup(bench_path, output, no_compress):
     try:
         output_dir = output or Path.cwd() / 'backups'
         result = backup_bench(
-            bench_path=bench_path,
+            bench_path=Path(bench_path),
             output_dir=output_dir,
             compress=not no_compress
         )
@@ -49,6 +49,8 @@ def backup(bench_path, output, no_compress):
             ))
             
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         console.print(Panel.fit(
             f"[red]Error during backup: {str(e)}[/red]",
             title="Backup Failed"
