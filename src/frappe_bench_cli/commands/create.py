@@ -1,14 +1,15 @@
 import os
 import json
 from pathlib import Path
+import subprocess
 from rich.console import Console
 from bench.utils.system import run_frappe_cmd,init
 from bench.app import App
 from bench.bench import Bench
-
+from bench import cli
 console = Console()
 
-def create_bench_from_info(bench_path, info_file):
+def create_bench_from_info(bench_path, info_file,skip_apps=False):
     """Create a bench using configuration from info file"""
     bench_path = Path(bench_path)
     info_file = Path(info_file)
@@ -20,36 +21,48 @@ def create_bench_from_info(bench_path, info_file):
         bench_info = json.load(f)
     
     # Create bench directory
-    bench_path.mkdir(parents=True, exist_ok=True)
     
     # Initialize bench
-    init(f"{bench_path}", python=bench_info.get('python_version', 'python3'), frappe_branch=bench_info.get('frappe_branch', 'version-15'))
-    
+    if not bench_path.exists():
+        bench_path.mkdir(parents=True, exist_ok=True)
+        init(f"{bench_path}", python=bench_info.get('python_version', 'python3'), frappe_branch=bench_info.get('frappe_branch', 'version-15'))
+    else:
+        console.print(f"[green]Bench {bench_path} already exist[/green]")
     # Install apps from info
-    for app in bench_info.get('apps', []):
-        if app.get('name') == "frappe": continue
-        try:
-            console.print(f"[cyan]Installing app {app['name']}...[/cyan]")
-            bench = Bench(bench_path)
-            app_obj = App(
-                app['git_url'], branch=app.get('branch'), bench=bench
-            )
-            app_obj.get()
-        except Exception as e:
-            console.print(f"[red]Error installing app {app['name']}: {str(e)}[/red]")
+    if not skip_apps:
+        for app in bench_info.get('apps', []):
+            if app.get('name') == "frappe": continue
+            try:
+                console.print(f"[cyan]get app {app['name']}...[/cyan]")
+                args = ['bench', 'get-app', app['git_url']]
+                if app.get('version'):
+                    args.extend(['--branch',app.get('version')])
+                result = subprocess.run(
+                    args,
+                    cwd=str(bench_path),
+                    capture_output=True,
+                    text=True
+                )
+            except Exception as e:
+                console.print(f"[red]Error get app {app['name']}: {str(e)}[/red]")
     
     # Create sites from info
-    for site in bench_info.get('sites', []):
-        try:
-            site_name = site['name']
-            console.print(f"[cyan]Creating site {site_name}...[/cyan]")
-            run_frappe_cmd("new-site", site_name, bench_path=bench_path)
-        except Exception as e:
-            console.print(f"[red]Error creating site {site_name}: {str(e)}[/red]")
+    # for site in bench_info.get('sites', []):
+    #     try:
+    #         site_name = site['name']
+    #         console.print(f"[cyan]Creating site {site_name}...[/cyan]")
+    #         result = subprocess.run(
+    #             ['bench', 'new-site', site_name,'--force'],
+    #             cwd=str(bench_path),
+    #             capture_output=True,
+    #             text=True
+    #         )
+    #     except Exception as e:
+    #         console.print(f"[red]Error creating site {site_name}: {str(e)}[/red]")
     
     return bench_path
 
-def create_bench(bench_path, info_file=None):
+def create_bench(bench_path, info_file=None, skip_apps=False):
     """
     Create a new Frappe bench
     
@@ -63,7 +76,7 @@ def create_bench(bench_path, info_file=None):
     bench_path = Path(bench_path)
     
     if info_file:
-        return create_bench_from_info(bench_path, info_file)
+        return create_bench_from_info(bench_path, info_file,skip_apps)
     
     # Use standard bench init
     console.print(f"[cyan]Creating new bench at {bench_path}...[/cyan]")

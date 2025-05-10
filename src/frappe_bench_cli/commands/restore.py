@@ -8,6 +8,9 @@ from git import Repo
 from rich.console import Console
 from rich.progress import Progress
 from .create import create_bench
+from bench.utils.system import run_frappe_cmd
+
+
 
 console = Console()
 
@@ -63,51 +66,40 @@ def restore_bench(backup_path, target_dir, skip_apps=False, skip_sites=False, ne
     
     # Create bench using the info file
     console.print(f"[cyan]Creating bench at {bench_dir}...[/cyan]")
-    create_bench(bench_dir, bench_info_path)
+    create_bench(bench_dir, bench_info_path, skip_apps)
     
     # Restore sites if not skipped
     if not skip_sites:
-        site_backups_dir = backup_dir / 'site_backups'
-        if site_backups_dir.exists():
-            with Progress() as progress:
-                task = progress.add_task("[cyan]Restoring sites...", total=len(bench_info['sites']))
-                
-                for site in bench_info['sites']:
-                    try:
-                        site_name = site['name']
-                        site_dir = bench_dir / 'sites' / site_name
-                        site_dir.mkdir(parents=True, exist_ok=True)
-                        
-                        # Copy site backup to the site's private/backups directory
-                        backup_site_dir = site_backups_dir / site_name
-                        if backup_site_dir.exists():
-                            private_dir = site_dir / 'private'
-                            private_dir.mkdir(parents=True, exist_ok=True)
-                            backups_dir = private_dir / 'backups'
-                            backups_dir.mkdir(parents=True, exist_ok=True)
-                            
-                            # Copy the backup file
-                            backup_files = list(backup_site_dir.glob('*.sql.gz'))
-                            if backup_files:
-                                latest_backup = max(backup_files, key=lambda x: x.stat().st_mtime)
-                                shutil.copy2(latest_backup, backups_dir / latest_backup.name)
-                                
-                                # Run bench restore command
-                                result = subprocess.run(
-                                    ['bench', 'restore', '--site', site_name, str(latest_backup.name)],
-                                    cwd=bench_dir,
-                                    capture_output=True,
-                                    text=True
-                                )
-                                
-                                if result.returncode == 0:
-                                    console.print(f"[green]Successfully restored site {site_name}[/green]")
-                                else:
-                                    console.print(f"[red]Failed to restore site {site_name}: {result.stderr}[/red]")
-                            else:
-                                console.print(f"[yellow]No backup files found for site {site_name}[/yellow]")
-                    except Exception as e:
-                        console.print(f"[red]Error restoring site {site['name']}: {str(e)}[/red]")
-                    progress.advance(task)
-    
+        sites_backup_dir = backup_dir / 'sites_backup'
+        if sites_backup_dir.exists():
+            for site in bench_info['sites']:
+                try:
+                    site_name = site['name']
+                    site_dir = bench_dir / 'sites' / site_name
+                    site_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Get site backup from sites_backup directory
+                    backup_site_dir = sites_backup_dir / site_name
+                    if backup_site_dir.exists():
+                        # Find the backup file in the site directory
+                        backup_files = list(backup_site_dir.glob('*.sql.gz'))
+                        if backup_files:
+                            # Since we know there's only one backup file per site
+                            backup_file = backup_files[0]
+                            console.print(f"[cyan]Restoring site {site_name} from {backup_file.name}...[/cyan]")
+                            result = subprocess.run(
+                                ['bench',"--site",site_name,"restore",backup_file],
+                                cwd=bench_dir
+                            )
+                        else:
+                            console.print(f"[yellow]No backup files found for site {site_name}[/yellow]")
+                    else:
+                        console.print(f"[yellow]No backup directory found for site {site_name}[/yellow]")
+                except SystemExit as e:
+                    console.print(f"[red]Failed to restore site {site_name}: Command exited with error[/red]")
+                    import traceback
+                    traceback.print_exc()
+                except Exception as e:
+                    console.print(f"[red]Error restoring site {site_name}: {str(e)}[/red]")
+
     return bench_dir

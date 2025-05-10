@@ -77,6 +77,10 @@ def backup_bench(bench_path, output_dir, compress=True):
     backup_dir = output_dir / backup_name
     backup_dir.mkdir(parents=True, exist_ok=True)
     
+    # Create sites_backup directory
+    sites_backup_dir = backup_dir / 'sites_backup'
+    sites_backup_dir.mkdir(parents=True, exist_ok=True)
+    
     # Save bench info
     with open(backup_dir / 'bench_info.json', 'w') as f:
         json.dump(bench_info, f, indent=2)
@@ -86,7 +90,10 @@ def backup_bench(bench_path, output_dir, compress=True):
         try:
             site_name = site['name']
             console.print(f"[cyan]Backing up site {site_name}...[/cyan]")
-            run_frappe_cmd("--site", site_name,"backup","--backup-path", backup_dir, bench_path=bench_path)
+            # Create site-specific backup directory
+            site_backup_dir = sites_backup_dir / site_name
+            site_backup_dir.mkdir(parents=True, exist_ok=True)
+            run_frappe_cmd("--site", site_name,"backup","--backup-path", site_backup_dir, bench_path=bench_path)
         except SystemExit as e:
             pass
         except Exception as e:
