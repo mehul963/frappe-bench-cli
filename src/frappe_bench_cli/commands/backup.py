@@ -25,7 +25,7 @@ class BenchBackupManager:
         self.output_dir = Path(output_dir)
         self.compress = compress
         self.exclude_files = exclude_files
-        self.backup_folder = backup_folder
+        self.backup_folder = Path(backup_folder) if backup_folder else None
         self.console = Console()
 
         if not self.bench_dir.exists():
@@ -42,7 +42,7 @@ class BenchBackupManager:
     @property
     def benches(self) -> List[Path]:
         return [
-            Path(self.bench_dir, path)
+            path
             for path in self.bench_dir.iterdir()
             if self.is_valid_bench(path)
         ]
@@ -55,15 +55,35 @@ class BenchBackupManager:
             (bench_path / 'apps').exists() and
             (bench_path / 'sites').exists()
         )
+        
+    @staticmethod
+    def get_python_version_from_bench(bench_path):
+        python_executable = os.path.join(bench_path, 'env', 'bin', 'python')
 
+        if not os.path.isfile(python_executable):
+            return None
+
+        try:
+            result = subprocess.run(
+                [python_executable, '--version'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            version_output = result.stdout.strip() or result.stderr.strip()  # Sometimes it's in stderr
+            _, version = version_output.split()
+            major, minor, *_ = version.split(".")
+            return f"python{major}.{minor}"
+        except Exception as e:
+            return None 
+        
     def get_bench_info(self, bench_path: Path) -> Dict[str, Any]:
         """Extract information about a bench including apps and sites."""
         if not self.is_valid_bench(bench_path):
             raise ValueError(f"{bench_path} is not a valid Frappe bench")
 
-        info: Dict[str, Any] = {'name': bench_path.name, 'apps': [], 'sites': []}
+        info: Dict[str, Any] = {'python': self.get_python_version_from_bench(bench_path),'name': bench_path.name, 'apps': [], 'sites': []}
 
-        # Collect apps info
         for app_dir in (bench_path / 'apps').iterdir():
             if app_dir.is_dir() and (app_dir / '.git').exists():
                 try:
@@ -105,9 +125,6 @@ class BenchBackupManager:
             self.console.print(f"[cyan]Backing up site {site_name}...[/cyan]")
             site_dir = sites_backup_dir / site_name
             site_dir.mkdir(parents=True)
-            database_path = site_dir / f"{site_name}-database.sql.gz"
-            files_path = site_dir / f"{site_name}-files.tar.gz"
-            private_files_path = site_dir / f"{site_name}-private-files.tar.gz"
             
             try:
                 # Run backup with specific paths
@@ -115,23 +132,22 @@ class BenchBackupManager:
                     "--site", site_name,
                     "backup",
                     "--backup-path", f"{site_dir}",
-                    "--backup-path-db", f"{database_path}",
-                    "--backup-path-files", f"{files_path}",
-                    "--backup-path-private-files", f"{private_files_path}"
                 ]
                 
                 if not self.exclude_files:
                     cmd_args.append("--with-files")
                 
                 run_frappe_cmd(*cmd_args, bench_path=bench_path)
-                
+                db_backup = next(site_dir.glob("*-database.sql.gz"), None)
+                files_backup = next(site_dir.glob("*-files.tar"), None)
+                private_files_backup = next(site_dir.glob("*-private-files.tar"), None)
+
                 # Update site metadata with backup paths
                 site['backup_paths'] = {
-                    'database': str(database_path.relative_to(backup_dir)),
-                    'files': str(files_path.relative_to(backup_dir)),
-                    'private_files': str(private_files_path.relative_to(backup_dir))
+                    'database': str(db_backup.relative_to(backup_dir)) if db_backup else '',
+                    'files': str(files_backup.relative_to(backup_dir)) if files_backup else '',
+                    'private_files': str(private_files_backup.relative_to(backup_dir)) if private_files_backup else ''
                 }
-                
             except Exception as e:
                 import traceback
                 traceback.print_exc()
@@ -162,26 +178,6 @@ class BenchBackupManager:
                 self.console.print(f"[red]Failed to backup {path.name}: {e}[/red]")
 
         return results
-
-        # Discover all benches
-        benches = [d for d in self.bench_dir.iterdir() if d.is_dir() and self.is_valid_bench(d)]
-        if not benches:
-            self.console.print("[yellow]No valid Frappe benches found[/yellow]")
-            return None
-
-        results: List[Path] = []
-        with Progress() as progress:
-            task = progress.add_task("[cyan]Backing up benches...", total=len(benches))
-            for bench_path in benches:
-                try:
-                    result = self.backup_single_bench(bench_path)
-                    results.append(result)
-                    self.console.print(f"[green]Backed up {bench_path.name} -> {result}[/green]")
-                except Exception as e:
-                    self.console.print(f"[red]Failed to backup {bench_path.name}: {e}[/red]")
-                progress.advance(task)
-        return results
-
 
 def backup_bench(
     bench_path: Path = None,
