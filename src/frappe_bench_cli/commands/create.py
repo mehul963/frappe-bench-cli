@@ -23,7 +23,7 @@ class BenchCreator:
         
         if not bench_path.exists():
             bench_path.mkdir(parents=True, exist_ok=True)
-            init(f"{bench_path}", python=bench_info.get('python_version', 'python3'), frappe_branch=bench_info.get('frappe_branch', 'version-15'))
+            init(f"{bench_path}", python=bench_info.get('python', 'python3'), frappe_branch=bench_info.get('version', 'version-15'))
         else:
             self.console.print(f"[green]Bench {bench_path} already exist[/green]")
         # Install apps from info

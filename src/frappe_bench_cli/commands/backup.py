@@ -79,7 +79,12 @@ class BenchBackupManager:
         if not self.is_valid_bench(bench_path):
             raise ValueError(f"{bench_path} is not a valid Frappe bench")
 
-        info: Dict[str, Any] = {'python': self.get_python_version_from_bench(bench_path),'name': bench_path.name, 'apps': [], 'sites': []}
+        info: Dict[str, Any] = {
+            'python': self.get_python_version_from_bench(bench_path),
+            'name': bench_path.name,
+            'apps': [],
+            'sites': []
+        }
 
         for app_dir in (bench_path / 'apps').iterdir():
             if app_dir.is_dir() and (app_dir / '.git').exists():
@@ -88,6 +93,8 @@ class BenchBackupManager:
                     remote_url = repo.remotes.upstream.url
                     branch = repo.active_branch.name
                     info['apps'].append({'name': app_dir.name, 'git_url': remote_url, 'version': branch})
+                    if app_dir.name == 'frappe':
+                        info['version'] = branch
                 except Exception as e:
                     self.console.print(f"[yellow]Warning: Could not get git info for {app_dir.name}: {e}[/yellow]")
 
