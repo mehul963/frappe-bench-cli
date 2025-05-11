@@ -9,7 +9,6 @@ from git import Repo
 from rich.console import Console
 from rich.progress import Progress
 from .create import create_bench
-from bench.utils.system import run_frappe_cmd
 from typing import Optional, Dict, Any, Tuple
 from contextlib import contextmanager
 

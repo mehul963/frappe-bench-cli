@@ -1,11 +1,9 @@
 import os
 import json
 import shutil
-import tarfile
 import subprocess
 from pathlib import Path
 from rich.console import Console
-from rich.progress import Progress
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from git import Repo
