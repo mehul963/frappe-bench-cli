@@ -9,7 +9,6 @@ from rich.progress import Progress
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from git import Repo
-from bench.utils.system import run_frappe_cmd
 
 
 class BenchBackupManager:
@@ -129,15 +128,20 @@ class BenchBackupManager:
             try:
                 # Run backup with specific paths
                 cmd_args = [
+                    "bench",
                     "--site", site_name,
                     "backup",
                     "--backup-path", f"{site_dir}",
                 ]
-                
                 if not self.exclude_files:
                     cmd_args.append("--with-files")
-                
-                run_frappe_cmd(*cmd_args, bench_path=bench_path)
+                result = subprocess.run(
+                    cmd_args,
+                    cwd=bench_path,
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
                 db_backup = next(site_dir.glob("*-database.sql.gz"), None)
                 files_backup = next(site_dir.glob("*-files.tar"), None)
                 private_files_backup = next(site_dir.glob("*-private-files.tar"), None)
