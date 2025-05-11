@@ -139,9 +139,13 @@ class BenchBackupManager:
                     cmd_args,
                     cwd=bench_path,
                     capture_output=True,
-                    text=True,
+                    text=True,  # This ensures output is returned as string
                     check=True
                 )
+                if result.stderr:
+                    self.console.print(f"[yellow]{result.stderr}[/yellow]")
+                if result.stdout:
+                    self.console.print(f"[cyan]{result.stdout}[/cyan]")
                 db_backup = next(site_dir.glob("*-database.sql.gz"), None)
                 files_backup = next(site_dir.glob("*-files.tar"), None)
                 private_files_backup = next(site_dir.glob("*-private-files.tar"), None)
